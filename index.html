@@ -96,6 +96,21 @@
   .empty{text-align:center;padding:40px 20px;color:var(--muted)}
   .empty .ic{font-size:34px;margin-bottom:8px}
 
+  /* Nav + Admin module */
+  .nav{max-width:1180px;margin:18px auto 0;padding:0 18px;display:flex;gap:8px}
+  .nav button{background:#fff;border:1px solid var(--line);color:var(--navy);padding:9px 16px;border-radius:9px;font-weight:700;font-size:13px}
+  .nav button.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .subtabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+  .subtabs button{background:#eef2f8;border:1px solid var(--line);color:var(--navy);padding:7px 14px;border-radius:20px;font-weight:600;font-size:12.5px}
+  .subtabs button.active{background:var(--orange);color:#fff;border-color:var(--orange)}
+  .matrix td,.matrix th{text-align:center}
+  .matrix td:first-child,.matrix th:first-child{text-align:left}
+  .matrix input[type=checkbox]{width:auto;transform:scale(1.3);cursor:pointer;accent-color:var(--orange)}
+  .chip{display:inline-block;background:#eef2f8;border:1px solid var(--line);border-radius:6px;padding:1px 7px;font-size:11px;color:var(--navy);font-weight:700}
+  .sys{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+  .ibtn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px}
+  .ibtn:hover{color:var(--red)}
+
   /* Login */
   #login{position:fixed;inset:0;background:linear-gradient(135deg,#11243e,#1b3458);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
   .login-card{background:#fff;border-radius:16px;padding:30px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
@@ -141,7 +156,12 @@
     <button class="btn-ghost" onclick="doLogout()">Sign out</button>
   </header>
 
-  <div class="wrap">
+  <div class="nav" id="nav">
+    <button id="nav-dash" class="active" onclick="showView('dash')">📊 Dashboard</button>
+    <button id="nav-admin" class="hide" onclick="showView('admin')">🛡️ Admin</button>
+  </div>
+
+  <div class="wrap" id="view-dash">
     <!-- Stats -->
     <div class="stats" id="stats"></div>
 
@@ -220,17 +240,52 @@
           </div>
           <div class="empty hide" id="hist-empty"><div class="ic">📊</div>No billing entries yet for this account.</div>
         </div>
+      </div>
+    </div>
+  </div>
 
-        <div class="card hide" id="roles-card">
-          <h2><span class="dot"></span>Users &amp; Roles <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);font-size:11px">— admin only</span></h2>
-          <p class="muted" style="margin:0 0 10px;font-size:12px"><b>Viewer</b>: read &amp; export only · <b>Encoder</b>: add/edit accounts &amp; bills · <b>Admin</b>: full control incl. delete &amp; roles.</p>
-          <div style="overflow-x:auto">
-            <table>
-              <thead><tr><th>User</th><th style="width:140px">Role</th></tr></thead>
-              <tbody id="roles-body"></tbody>
-            </table>
-          </div>
-        </div>
+  <!-- ADMIN MODULE -->
+  <div class="wrap hide" id="view-admin">
+    <div class="subtabs">
+      <button id="st-users" class="active" onclick="adminTab('users')">👤 Users</button>
+      <button id="st-roles" onclick="adminTab('roles')">🛡️ Roles &amp; Permissions</button>
+      <button id="st-log" onclick="adminTab('log')">📜 Activity Log</button>
+    </div>
+
+    <div id="atab-users" class="card">
+      <div class="toolbar">
+        <h2 style="margin:0"><span class="dot"></span>&nbsp;User Management</h2>
+        <div class="spacer"></div>
+        <input id="user-search" placeholder="Search name or email…" style="max-width:240px" oninput="renderUsers()" />
+      </div>
+      <div style="overflow-x:auto">
+        <table><thead><tr><th>User</th><th>Last sign-in</th><th style="width:170px">Role</th></tr></thead>
+          <tbody id="users-body"></tbody></table>
+      </div>
+    </div>
+
+    <div id="atab-roles" class="card hide">
+      <div class="toolbar">
+        <h2 style="margin:0"><span class="dot"></span>&nbsp;Roles &amp; Permissions</h2>
+        <div class="spacer"></div>
+        <button class="btn-ghost" style="border-color:var(--line);color:var(--navy)" onclick="openAddRole()">+ Add role</button>
+      </div>
+      <p class="muted" style="font-size:12px;margin:0 0 12px">Tick a box to grant a permission. Changes save instantly and apply immediately. System roles can't be deleted.</p>
+      <div style="overflow-x:auto">
+        <table class="matrix"><thead><tr><th>Role</th><th>View</th><th>Create</th><th>Edit</th><th>Delete</th><th>Manage&nbsp;Users</th><th></th></tr></thead>
+          <tbody id="matrix-body"></tbody></table>
+      </div>
+    </div>
+
+    <div id="atab-log" class="card hide">
+      <div class="toolbar">
+        <h2 style="margin:0"><span class="dot"></span>&nbsp;Activity Log</h2>
+        <div class="spacer"></div>
+        <button class="btn-ghost" style="border-color:var(--line);color:var(--navy)" onclick="loadActivity()">⟳ Refresh</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table><thead><tr><th>When</th><th>User</th><th>Action</th><th>Detail</th></tr></thead>
+          <tbody id="log-body"></tbody></table>
       </div>
     </div>
   </div>
@@ -267,6 +322,22 @@
   </div>
 </div>
 
+<!-- ADD ROLE MODAL -->
+<div class="modal-bg hide" id="role-bg">
+  <div class="modal" style="max-width:380px">
+    <h3>Add Custom Role</h3>
+    <div class="sub">Create the role, then set its permissions in the matrix.</div>
+    <label>Role key (lowercase, no spaces) *</label>
+    <input id="nr-key" placeholder="e.g. approver" />
+    <label>Display label *</label>
+    <input id="nr-label" placeholder="e.g. Approver" />
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="closeAddRole()">Cancel</button>
+      <button class="btn" onclick="saveRole()">Create role</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -274,9 +345,14 @@ const SUPABASE_URL = "https://emkcwukiqxnvcbhkjiqz.supabase.co";
 const SUPABASE_KEY = "sb_publishable_u_qnmEI8oHI9Z_A0-Hht3Q_Yvaa7Ork";
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-let accounts = [], bills = [], currentAcct = null, chart = null, role = 'viewer';
-function canEdit(){ return role==='admin' || role==='encoder'; }
-function isAdmin(){ return role==='admin'; }
+let accounts = [], bills = [], currentAcct = null, chart = null;
+let role = 'viewer', perms = {}, rolesCatalog = [], usersCache = [], userRoleMap = {}, curView='dash', curAdminTab='users';
+const ACTIONS = ['view','create','edit','delete','manage_users'];
+function P(a){ return !!perms[a]; }
+function canEdit(){ return P('edit'); }
+function canCreate(){ return P('create'); }
+function canDelete(){ return P('delete'); }
+function isAdmin(){ return P('manage_users'); }
 const peso = n => "₱" + (n==null?0:Number(n)).toLocaleString("en-PH",{minimumFractionDigits:2,maximumFractionDigits:2});
 const num = (n,d=2) => n==null?"—":Number(n).toLocaleString("en-PH",{minimumFractionDigits:d,maximumFractionDigits:d});
 function toast(m){const t=document.getElementById("toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2200);}
@@ -305,40 +381,136 @@ async function showApp(session){
   loadAccounts();
 }
 
-/* ---------- RBAC ---------- */
+/* ---------- RBAC: permission engine ---------- */
 async function fetchRole(uid){
   const {data}=await sb.from("meralco_user_roles").select("role").eq("user_id",uid).maybeSingle();
   role = data && data.role ? data.role : 'viewer';
-  applyRole();
+  const {data:rp}=await sb.from("meralco_role_permissions").select("action,allowed").eq("role",role);
+  perms={}; (rp||[]).forEach(r=>perms[r.action]=r.allowed);
+  if(!Object.keys(perms).length) perms={view:true}; // safety net for unmapped role
+  applyPerms();
 }
-function applyRole(){
+function applyPerms(){
   const b=document.getElementById("role-badge");
-  b.textContent=role; b.className="role-badge "+role;
-  const ce=canEdit(), ad=isAdmin();
-  document.getElementById("acct-toggle").style.display = ce?"":"none";
-  if(!ce) document.getElementById("acct-form").classList.add("hide");
-  document.getElementById("bill-card").style.display = ce?"":"none";
-  const ro=document.getElementById("acct-readonly"); if(ro) ro.style.display = ce?"none":"block";
-  const rc=document.getElementById("roles-card"); rc.classList.toggle("hide", !ad);
-  if(ad) loadRoles();
+  b.textContent=role; b.className="role-badge "+(['admin','encoder','viewer'].includes(role)?role:"");
+  const showForms = canCreate();
+  document.getElementById("acct-toggle").style.display = showForms?"":"none";
+  if(!showForms) document.getElementById("acct-form").classList.add("hide");
+  document.getElementById("bill-card").style.display = showForms?"":"none";
+  const ro=document.getElementById("acct-readonly"); if(ro) ro.style.display = (canCreate()||canEdit())?"none":"block";
+  document.getElementById("nav-admin").classList.toggle("hide", !isAdmin());
+  if(!isAdmin() && curView==='admin') showView('dash');
+  renderTable();
 }
-async function loadRoles(){
-  const [{data:profs},{data:roles}] = await Promise.all([
-    sb.from("profiles").select("id,email,name,active").order("email"),
+async function myUid(){ return (await sb.auth.getUser()).data.user.id; }
+
+/* ---------- View switching ---------- */
+function showView(v){
+  curView=v;
+  document.getElementById("view-dash").classList.toggle("hide", v!=='dash');
+  document.getElementById("view-admin").classList.toggle("hide", v!=='admin');
+  document.getElementById("nav-dash").classList.toggle("active", v==='dash');
+  document.getElementById("nav-admin").classList.toggle("active", v==='admin');
+  if(v==='admin') loadCatalog().then(()=>adminTab(curAdminTab));
+}
+function adminTab(t){
+  curAdminTab=t;
+  ['users','roles','log'].forEach(x=>{
+    document.getElementById("atab-"+x).classList.toggle("hide", x!==t);
+    document.getElementById("st-"+x).classList.toggle("active", x===t);
+  });
+  if(t==='users') loadUsers(); else if(t==='roles') loadMatrix(); else if(t==='log') loadActivity();
+}
+
+/* ---------- Admin: roles catalog ---------- */
+async function loadCatalog(){
+  const {data}=await sb.from("meralco_roles").select("*").order("is_system",{ascending:false}).order("role");
+  rolesCatalog=data||[];
+}
+
+/* ---------- Admin: user management ---------- */
+async function loadUsers(){
+  const [{data:profs},{data:roles}]=await Promise.all([
+    sb.from("profiles").select("id,email,name,active,last_sign_in").order("email"),
     sb.from("meralco_user_roles").select("user_id,role")
   ]);
-  const rmap={}; (roles||[]).forEach(x=>rmap[x.user_id]=x.role);
-  const opts=["viewer","encoder","admin"];
-  document.getElementById("roles-body").innerHTML = (profs||[]).map(p=>{
-    const cur=rmap[p.id]||"viewer";
-    return `<tr><td>${esc(p.name||p.email||"(no name)")}<div class="muted" style="font-size:11px">${esc(p.email||"")}</div></td>
-      <td><select onchange="setRole('${p.id}',this.value)">${opts.map(o=>`<option value="${o}" ${o===cur?"selected":""}>${o}</option>`).join("")}</select></td></tr>`;
+  usersCache=profs||[];
+  userRoleMap={}; (roles||[]).forEach(x=>userRoleMap[x.user_id]=x.role);
+  renderUsers();
+}
+function renderUsers(){
+  const q=(document.getElementById("user-search").value||"").toLowerCase();
+  const opts=rolesCatalog.length?rolesCatalog:[{role:'viewer',label:'Viewer'},{role:'encoder',label:'Encoder'},{role:'admin',label:'Administrator'}];
+  const rows=usersCache.filter(p=>!q||(p.name||"").toLowerCase().includes(q)||(p.email||"").toLowerCase().includes(q));
+  document.getElementById("users-body").innerHTML = rows.map(p=>{
+    const cur=userRoleMap[p.id]||"viewer";
+    const ls=p.last_sign_in?new Date(p.last_sign_in).toLocaleDateString("en-PH",{year:"numeric",month:"short",day:"numeric"}):"—";
+    return `<tr><td>${esc(p.name||"(no name)")}<div class="muted" style="font-size:11px">${esc(p.email||"")}</div></td>
+      <td class="muted">${ls}</td>
+      <td><select onchange="setUserRole('${p.id}',this.value)">${opts.map(o=>`<option value="${esc(o.role)}" ${o.role===cur?"selected":""}>${esc(o.label||o.role)}</option>`).join("")}</select></td></tr>`;
+  }).join("") || `<tr><td colspan="3" class="muted">No users match.</td></tr>`;
+}
+async function setUserRole(uid,r){
+  const {error}=await sb.from("meralco_user_roles").upsert({user_id:uid,role:r},{onConflict:"user_id"});
+  if(error){toast("Role error: "+error.message);return;}
+  userRoleMap[uid]=r;
+  const who=(usersCache.find(u=>u.id===uid)||{}).email||uid;
+  logAct("role_change",who+" → "+r); toast("Role updated");
+  if(uid===await myUid()) fetchRole(uid);
+}
+
+/* ---------- Admin: permission matrix ---------- */
+async function loadMatrix(){
+  await loadCatalog();
+  const {data:rp}=await sb.from("meralco_role_permissions").select("role,action,allowed");
+  const map={}; (rp||[]).forEach(x=>{(map[x.role]=map[x.role]||{})[x.action]=x.allowed;});
+  document.getElementById("matrix-body").innerHTML = rolesCatalog.map(r=>{
+    const pm=map[r.role]||{};
+    const cells=ACTIONS.map(a=>`<td><input type="checkbox" ${pm[a]?"checked":""} onchange="setPerm('${esc(r.role)}','${a}',this.checked)"></td>`).join("");
+    const last=r.is_system?`<span class="sys">system</span>`:`<button class="ibtn" title="Delete role" onclick="delRole('${esc(r.role)}')">🗑</button>`;
+    return `<tr><td><b>${esc(r.label)}</b> <span class="chip">${esc(r.role)}</span></td>${cells}<td>${last}</td></tr>`;
   }).join("");
 }
-async function setRole(uid, r){
-  const {error}=await sb.from("meralco_user_roles").upsert({user_id:uid, role:r},{onConflict:"user_id"});
-  if(error){toast("Role error: "+error.message);return;}
-  toast("Role updated");
+async function setPerm(roleKey,action,allowed){
+  const {error}=await sb.from("meralco_role_permissions").upsert({role:roleKey,action,allowed},{onConflict:"role,action"});
+  if(error){toast("Save error: "+error.message);loadMatrix();return;}
+  logAct("perm_change",roleKey+" · "+action+" = "+allowed);
+  toast("Permission updated");
+  if(roleKey===role) fetchRole(await myUid());
+}
+function openAddRole(){ document.getElementById("nr-key").value=""; document.getElementById("nr-label").value=""; document.getElementById("role-bg").classList.remove("hide"); }
+function closeAddRole(){ document.getElementById("role-bg").classList.add("hide"); }
+async function saveRole(){
+  const key=(document.getElementById("nr-key").value||"").trim().toLowerCase().replace(/\s+/g,"_");
+  const label=(document.getElementById("nr-label").value||"").trim();
+  if(!key||!label){toast("Key and label are required");return;}
+  const {error}=await sb.from("meralco_roles").insert({role:key,label:label,is_system:false});
+  if(error){toast("Error: "+error.message);return;}
+  await sb.from("meralco_role_permissions").insert(ACTIONS.map(a=>({role:key,action:a,allowed:a==='view'})));
+  logAct("role_create","Created role "+key);
+  toast("Role created"); closeAddRole(); loadMatrix();
+}
+async function delRole(roleKey){
+  if(!confirm("Delete role '"+roleKey+"'? Users with this role revert to viewer."))return;
+  const {error}=await sb.from("meralco_roles").delete().eq("role",roleKey);
+  if(error){toast("Delete error: "+error.message);return;}
+  logAct("role_delete","Deleted role "+roleKey);
+  toast("Role deleted"); loadMatrix();
+}
+
+/* ---------- Admin: activity log ---------- */
+async function logAct(action,detail){
+  try{ const u=(await sb.auth.getUser()).data.user;
+    await sb.from("meralco_activity").insert({action,detail,user_email:u?u.email:null});
+  }catch(e){}
+}
+async function loadActivity(){
+  const {data}=await sb.from("meralco_activity").select("*").order("created_at",{ascending:false}).limit(200);
+  document.getElementById("log-body").innerHTML = (data||[]).map(a=>`<tr>
+    <td class="muted">${new Date(a.created_at).toLocaleString("en-PH")}</td>
+    <td>${esc(a.user_email||"—")}</td>
+    <td><span class="chip">${esc(a.action||"")}</span></td>
+    <td style="white-space:normal">${esc(a.detail||"")}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">No activity yet.</td></tr>`;
 }
 document.getElementById("li-pass").addEventListener("keydown",e=>{if(e.key==="Enter")doLogin();});
 
@@ -374,7 +546,7 @@ async function saveAccount(){
   if(error){toast("Save error: "+error.message);return;}
   ["a-name","a-acctno","a-meterno","a-addr","a-rate"].forEach(i=>document.getElementById(i).value="");
   document.getElementById("acct-form").classList.add("hide");
-  currentAcct=data; toast("Account added"); loadAccounts();
+  currentAcct=data; logAct("account_add",name+(rec.account_number?" (CAN "+rec.account_number+")":"")); toast("Account added"); loadAccounts();
 }
 
 /* ---------- BILLS ---------- */
@@ -412,13 +584,14 @@ async function saveBill(){
   btn.disabled=false;btn.textContent="Save billing entry";
   if(error){toast("Save error: "+error.message);return;}
   ["b-curr","b-amt","b-notes"].forEach(i=>document.getElementById(i).value="");
-  toast("Billing entry saved"); loadBills();
+  logAct("bill_add",(currentAcct.account_name||"")+": "+num(curr-prev)+" kWh"+(isFinite(amt)?", "+peso(amt):"")); toast("Billing entry saved"); loadBills();
 }
 async function delBill(id){
   if(!confirm("Delete this billing entry?"))return;
+  const b=bills.find(x=>x.id===id);
   const {error}=await sb.from("meralco_bills").delete().eq("id",id);
   if(error){toast("Delete error: "+error.message);return;}
-  toast("Deleted"); loadBills();
+  logAct("bill_delete",(currentAcct?currentAcct.account_name:"")+(b?": "+num(b.kwh_used)+" kWh":"")); toast("Deleted"); loadBills();
 }
 
 /* ---------- EDIT ---------- */
@@ -468,7 +641,7 @@ async function saveEdit(){
     total_amount:isFinite(amt)?amt:null,notes:val("e-notes")};
   const {error}=await sb.from("meralco_bills").update(rec).eq("id",editId);
   if(error){toast("Update error: "+error.message);return;}
-  toast("Entry updated"); closeEdit(); loadBills();
+  logAct("bill_edit",(currentAcct?currentAcct.account_name:"")+": "+num(curr-prev)+" kWh"); toast("Entry updated"); closeEdit(); loadBills();
 }
 
 /* ---------- RENDER ---------- */
@@ -513,7 +686,7 @@ function renderTable(){
       <td class="num">${b.total_amount!=null?peso(b.total_amount):"—"}</td>
       <td class="num">${b.rate_per_kwh!=null?"₱"+num(b.rate_per_kwh,4):"—"}</td>
       <td class="num">${dA==null?"—":`<span class="pill ${dA>0?"up":"down"}">${arrow(dA)}${peso(Math.abs(dA))}</span>`}</td>
-      <td class="num" style="white-space:nowrap">${(canEdit()?`<button class="edit" title="Edit" onclick="openEdit('${b.id}')">✎</button>`:"")+(isAdmin()?`<button class="del" title="Delete" onclick="delBill('${b.id}')">✕</button>`:"")||'<span class="muted">—</span>'}</td>
+      <td class="num" style="white-space:nowrap">${(canEdit()?`<button class="edit" title="Edit" onclick="openEdit('${b.id}')">✎</button>`:"")+(canDelete()?`<button class="del" title="Delete" onclick="delBill('${b.id}')">✕</button>`:"")||'<span class="muted">—</span>'}</td>
     </tr>`;
   }).join("");
 }
