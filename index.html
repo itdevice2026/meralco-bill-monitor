@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Meralco Bill Monitoring System</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  :root{
+    --orange:#f7941e; --orange-d:#d97a06; --navy:#11243e; --navy-2:#1b3458;
+    --bg:#f4f6fa; --card:#ffffff; --line:#e3e8f0; --text:#1f2a3a; --muted:#6b7891;
+    --green:#1d9d5e; --red:#d23b3b; --green-bg:#e7f7ee; --red-bg:#fdeaea;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);font-size:14px}
+  h1,h2,h3{margin:0}
+  button{font-family:inherit;cursor:pointer}
+  input,select,textarea{font-family:inherit;font-size:14px}
+  a{color:var(--orange-d)}
+
+  /* Header */
+  header{background:var(--navy);color:#fff;padding:14px 22px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:20}
+  .logo{display:flex;align-items:center;gap:11px}
+  .logo .bolt{width:34px;height:34px;border-radius:9px;background:var(--orange);display:flex;align-items:center;justify-content:center;font-size:20px}
+  .logo h1{font-size:17px;font-weight:700;letter-spacing:.2px}
+  .logo small{display:block;font-size:11px;color:#9fb0c9;font-weight:400}
+  header .spacer{flex:1}
+  .who{font-size:12.5px;color:#cdd8e8}
+  .btn-ghost{background:transparent;border:1px solid #39507a;color:#cdd8e8;padding:7px 12px;border-radius:8px;font-size:12.5px}
+  .btn-ghost:hover{background:#1b3458}
+
+  /* Layout */
+  .wrap{max-width:1180px;margin:22px auto;padding:0 18px}
+  .grid{display:grid;grid-template-columns:330px 1fr;gap:18px;align-items:start}
+  @media(max-width:900px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:18px;box-shadow:0 1px 2px rgba(20,40,80,.04)}
+  .card h2{font-size:14px;text-transform:uppercase;letter-spacing:.6px;color:var(--navy);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+  .card h2 .dot{width:7px;height:7px;border-radius:50%;background:var(--orange)}
+
+  label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px;font-weight:600}
+  input,select,textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:#fbfcfe;color:var(--text)}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--orange);background:#fff}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .btn{background:var(--orange);color:#fff;border:none;padding:10px 16px;border-radius:9px;font-weight:700;font-size:13.5px;width:100%;margin-top:14px}
+  .btn:hover{background:var(--orange-d)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn-sec{background:#eef2f8;color:var(--navy);border:1px solid var(--line)}
+  .btn-sec:hover{background:#e3e9f3}
+
+  .calc-box{background:linear-gradient(135deg,#11243e,#1b3458);color:#fff;border-radius:11px;padding:14px;margin-top:14px}
+  .calc-box .crow{display:flex;justify-content:space-between;padding:5px 0;font-size:13px;color:#bccbe0}
+  .calc-box .crow b{color:#fff;font-size:15px}
+  .calc-box .big{border-top:1px solid #34507e;margin-top:6px;padding-top:9px}
+  .calc-box .big b{color:var(--orange);font-size:19px}
+
+  /* Stats */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+  @media(max-width:700px){.stats{grid-template-columns:1fr 1fr}}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .stat .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+  .stat .val{font-size:22px;font-weight:800;margin-top:5px;color:var(--navy)}
+  .stat .sub{font-size:11.5px;margin-top:3px}
+  .up{color:var(--red)} .down{color:var(--green)}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;padding:10px 10px;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px;border-bottom:2px solid var(--line);white-space:nowrap}
+  td{padding:10px 10px;border-bottom:1px solid #eef1f6;white-space:nowrap}
+  tr:hover td{background:#fafbfd}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+  .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11.5px;font-weight:700}
+  .pill.up{background:var(--red-bg)} .pill.down{background:var(--green-bg)}
+  .del{color:var(--muted);background:none;border:none;font-size:15px}
+  .del:hover{color:var(--red)}
+
+  .toolbar{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+  .toolbar select{width:auto;min-width:200px}
+  .toolbar .spacer{flex:1}
+  .muted{color:var(--muted)}
+  .empty{text-align:center;padding:40px 20px;color:var(--muted)}
+  .empty .ic{font-size:34px;margin-bottom:8px}
+
+  /* Login */
+  #login{position:fixed;inset:0;background:linear-gradient(135deg,#11243e,#1b3458);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
+  .login-card{background:#fff;border-radius:16px;padding:30px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+  .login-card .logo{justify-content:center;margin-bottom:6px}
+  .login-card .logo h1{color:var(--navy)}
+  .login-card .logo small{color:var(--muted)}
+  .login-sub{text-align:center;color:var(--muted);font-size:13px;margin:8px 0 18px}
+  .err{background:var(--red-bg);color:var(--red);padding:9px 12px;border-radius:8px;font-size:12.5px;margin-top:12px;display:none}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;z-index:60;opacity:0;transition:opacity .25s;pointer-events:none}
+  .toast.show{opacity:1}
+  .hide{display:none!important}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login">
+  <div class="login-card">
+    <div class="logo">
+      <div class="bolt">⚡</div>
+      <div><h1>Meralco Bill Monitor</h1><small>Meatplus Trading Corp</small></div>
+    </div>
+    <p class="login-sub">Sign in with your company account</p>
+    <label>Email</label>
+    <input id="li-email" type="email" placeholder="you@meatplus.ph" autocomplete="username" />
+    <label>Password</label>
+    <input id="li-pass" type="password" placeholder="••••••••" autocomplete="current-password" />
+    <button class="btn" id="li-btn" onclick="doLogin()">Sign In</button>
+    <div class="err" id="li-err"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" class="hide">
+  <header>
+    <div class="logo">
+      <div class="bolt">⚡</div>
+      <div><h1>Meralco Bill Monitoring System</h1><small>Track consumption &amp; cost per kWh</small></div>
+    </div>
+    <div class="spacer"></div>
+    <span class="who" id="who"></span>
+    <button class="btn-ghost" onclick="doLogout()">Sign out</button>
+  </header>
+
+  <div class="wrap">
+    <!-- Stats -->
+    <div class="stats" id="stats"></div>
+
+    <div class="grid">
+      <!-- LEFT: forms -->
+      <div>
+        <div class="card">
+          <h2><span class="dot"></span>Account / Meter</h2>
+          <label>Select account</label>
+          <select id="acct-select" onchange="onAcctChange()"></select>
+          <button class="btn btn-sec" onclick="toggleAcctForm()" id="acct-toggle">+ Add new account</button>
+          <div id="acct-form" class="hide">
+            <label>Account name *</label>
+            <input id="a-name" placeholder="e.g. Main Plant — Marikina" />
+            <div class="row2">
+              <div><label>Account number</label><input id="a-acctno" placeholder="0000-0000-00" /></div>
+              <div><label>Meter number</label><input id="a-meterno" placeholder="Meter #" /></div>
+            </div>
+            <label>Service address</label>
+            <input id="a-addr" placeholder="Address" />
+            <label>Rate class</label>
+            <input id="a-rate" placeholder="e.g. Commercial / Residential" />
+            <button class="btn" onclick="saveAccount()">Save account</button>
+          </div>
+        </div>
+
+        <div class="card" id="bill-card">
+          <h2><span class="dot"></span>New Billing Entry</h2>
+          <div class="row2">
+            <div><label>Period start</label><input id="b-start" type="date" /></div>
+            <div><label>Period end</label><input id="b-end" type="date" /></div>
+          </div>
+          <label>Due date</label>
+          <input id="b-due" type="date" />
+          <div class="row2">
+            <div><label>Previous reading (kWh)</label><input id="b-prev" type="number" step="0.01" inputmode="decimal" oninput="liveCalc()" /></div>
+            <div><label>Current reading (kWh)</label><input id="b-curr" type="number" step="0.01" inputmode="decimal" oninput="liveCalc()" /></div>
+          </div>
+          <label>Total bill amount (₱)</label>
+          <input id="b-amt" type="number" step="0.01" inputmode="decimal" oninput="liveCalc()" placeholder="0.00" />
+          <label>Notes</label>
+          <input id="b-notes" placeholder="optional" />
+
+          <div class="calc-box">
+            <div class="crow"><span>kWh consumed</span><b id="c-kwh">—</b></div>
+            <div class="crow"><span>Effective rate</span><b id="c-rate">—</b></div>
+            <div class="crow big"><span>Total amount</span><b id="c-amt">₱0.00</b></div>
+          </div>
+          <button class="btn" id="save-bill" onclick="saveBill()">Save billing entry</button>
+        </div>
+      </div>
+
+      <!-- RIGHT: data -->
+      <div>
+        <div class="card">
+          <canvas id="chart" height="120"></canvas>
+        </div>
+
+        <div class="card">
+          <div class="toolbar">
+            <h2 style="margin:0"><span class="dot"></span>&nbsp;Billing History</h2>
+            <div class="spacer"></div>
+            <button class="btn-ghost" style="border-color:var(--line);color:var(--navy)" onclick="exportCSV()">⬇ Export CSV</button>
+          </div>
+          <div style="overflow-x:auto">
+            <table id="hist">
+              <thead><tr>
+                <th>Period</th><th class="num">Prev</th><th class="num">Curr</th>
+                <th class="num">kWh</th><th class="num">Δ kWh</th>
+                <th class="num">Amount</th><th class="num">₱/kWh</th><th class="num">Δ Cost</th><th></th>
+              </tr></thead>
+              <tbody id="hist-body"></tbody>
+            </table>
+          </div>
+          <div class="empty hide" id="hist-empty"><div class="ic">📊</div>No billing entries yet for this account.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL = "https://emkcwukiqxnvcbhkjiqz.supabase.co";
+const SUPABASE_KEY = "sb_publishable_u_qnmEI8oHI9Z_A0-Hht3Q_Yvaa7Ork";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let accounts = [], bills = [], currentAcct = null, chart = null;
+const peso = n => "₱" + (n==null?0:Number(n)).toLocaleString("en-PH",{minimumFractionDigits:2,maximumFractionDigits:2});
+const num = (n,d=2) => n==null?"—":Number(n).toLocaleString("en-PH",{minimumFractionDigits:d,maximumFractionDigits:d});
+function toast(m){const t=document.getElementById("toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2200);}
+
+/* ---------- AUTH ---------- */
+async function init(){
+  const {data:{session}} = await sb.auth.getSession();
+  if(session){ showApp(session); }
+}
+async function doLogin(){
+  const email=document.getElementById("li-email").value.trim();
+  const pass=document.getElementById("li-pass").value;
+  const err=document.getElementById("li-err"); err.style.display="none";
+  const btn=document.getElementById("li-btn"); btn.disabled=true; btn.textContent="Signing in…";
+  const {data,error}=await sb.auth.signInWithPassword({email,password:pass});
+  btn.disabled=false; btn.textContent="Sign In";
+  if(error){err.textContent=error.message;err.style.display="block";return;}
+  showApp(data.session);
+}
+async function doLogout(){ await sb.auth.signOut(); location.reload(); }
+function showApp(session){
+  document.getElementById("login").classList.add("hide");
+  document.getElementById("app").classList.remove("hide");
+  document.getElementById("who").textContent = session.user.email;
+  loadAccounts();
+}
+document.getElementById("li-pass").addEventListener("keydown",e=>{if(e.key==="Enter")doLogin();});
+
+/* ---------- ACCOUNTS ---------- */
+async function loadAccounts(){
+  const {data,error}=await sb.from("meralco_accounts").select("*").order("account_name");
+  if(error){toast("Load error: "+error.message);return;}
+  accounts=data||[];
+  const sel=document.getElementById("acct-select");
+  sel.innerHTML = accounts.length? accounts.map(a=>`<option value="${a.id}">${esc(a.account_name)}${a.meter_number?" — "+esc(a.meter_number):""}</option>`).join("")
+    : `<option value="">No accounts yet — add one →</option>`;
+  if(accounts.length){ currentAcct = accounts.find(a=>a.id===currentAcct?.id)||accounts[0]; sel.value=currentAcct.id; loadBills(); }
+  else { currentAcct=null; bills=[]; render(); document.getElementById("acct-form").classList.remove("hide"); }
+}
+function onAcctChange(){ currentAcct=accounts.find(a=>a.id===document.getElementById("acct-select").value); loadBills(); }
+function toggleAcctForm(){ document.getElementById("acct-form").classList.toggle("hide"); }
+async function saveAccount(){
+  const name=document.getElementById("a-name").value.trim();
+  if(!name){toast("Account name is required");return;}
+  const rec={account_name:name,
+    account_number:val("a-acctno"),meter_number:val("a-meterno"),
+    service_address:val("a-addr"),rate_class:val("a-rate")};
+  const {data,error}=await sb.from("meralco_accounts").insert(rec).select().single();
+  if(error){toast("Save error: "+error.message);return;}
+  ["a-name","a-acctno","a-meterno","a-addr","a-rate"].forEach(i=>document.getElementById(i).value="");
+  document.getElementById("acct-form").classList.add("hide");
+  currentAcct=data; toast("Account added"); loadAccounts();
+}
+
+/* ---------- BILLS ---------- */
+async function loadBills(){
+  if(!currentAcct){bills=[];render();return;}
+  const {data,error}=await sb.from("meralco_bills").select("*").eq("account_id",currentAcct.id).order("period_end",{ascending:true});
+  if(error){toast("Load error: "+error.message);return;}
+  bills=data||[];
+  // auto-fill previous reading from last bill's current reading
+  if(bills.length){ document.getElementById("b-prev").value = bills[bills.length-1].current_reading; }
+  liveCalc(); render();
+}
+function liveCalc(){
+  const prev=parseFloat(document.getElementById("b-prev").value);
+  const curr=parseFloat(document.getElementById("b-curr").value);
+  const amt=parseFloat(document.getElementById("b-amt").value);
+  const kwh=(isFinite(prev)&&isFinite(curr))?(curr-prev):null;
+  document.getElementById("c-kwh").textContent = kwh==null?"—":num(kwh)+" kWh";
+  document.getElementById("c-amt").textContent = peso(isFinite(amt)?amt:0);
+  document.getElementById("c-rate").textContent = (kwh&&kwh>0&&isFinite(amt))?("₱"+num(amt/kwh,4)+" /kWh"):"—";
+}
+async function saveBill(){
+  if(!currentAcct){toast("Add/select an account first");return;}
+  const prev=parseFloat(document.getElementById("b-prev").value);
+  const curr=parseFloat(document.getElementById("b-curr").value);
+  if(!isFinite(prev)||!isFinite(curr)){toast("Enter previous & current readings");return;}
+  if(curr<prev){toast("Current reading is less than previous");return;}
+  const amt=parseFloat(document.getElementById("b-amt").value);
+  const rec={account_id:currentAcct.id,
+    period_start:val("b-start"),period_end:val("b-end"),due_date:val("b-due"),
+    previous_reading:prev,current_reading:curr,
+    total_amount:isFinite(amt)?amt:null,notes:val("b-notes")};
+  const btn=document.getElementById("save-bill");btn.disabled=true;btn.textContent="Saving…";
+  const {error}=await sb.from("meralco_bills").insert(rec);
+  btn.disabled=false;btn.textContent="Save billing entry";
+  if(error){toast("Save error: "+error.message);return;}
+  ["b-curr","b-amt","b-notes"].forEach(i=>document.getElementById(i).value="");
+  toast("Billing entry saved"); loadBills();
+}
+async function delBill(id){
+  if(!confirm("Delete this billing entry?"))return;
+  const {error}=await sb.from("meralco_bills").delete().eq("id",id);
+  if(error){toast("Delete error: "+error.message);return;}
+  toast("Deleted"); loadBills();
+}
+
+/* ---------- RENDER ---------- */
+function render(){ renderStats(); renderTable(); renderChart(); }
+
+function renderStats(){
+  const el=document.getElementById("stats");
+  if(!bills.length){el.innerHTML=card("Latest kWh","—","")+card("Latest ₱/kWh","—","")+card("Latest amount","—","")+card("Avg ₱/kWh","—","");return;}
+  const last=bills[bills.length-1], prev=bills.length>1?bills[bills.length-2]:null;
+  const dK = prev? last.kwh_used-prev.kwh_used : null;
+  const dKpct = prev&&prev.kwh_used? (dK/prev.kwh_used*100):null;
+  const dA = (prev&&last.total_amount!=null&&prev.total_amount!=null)? last.total_amount-prev.total_amount:null;
+  const rates=bills.filter(b=>b.rate_per_kwh!=null).map(b=>Number(b.rate_per_kwh));
+  const avgRate=rates.length?rates.reduce((a,b)=>a+b,0)/rates.length:null;
+  el.innerHTML =
+    card("Latest kWh", num(last.kwh_used)+" kWh", dK==null?"":arrow(dK)+num(Math.abs(dK))+" kWh"+(dKpct!=null?` (${dKpct>=0?"+":"−"}${num(Math.abs(dKpct),1)}%)`:""), dK)
+  + card("Latest ₱/kWh", last.rate_per_kwh!=null?"₱"+num(last.rate_per_kwh,4):"—","")
+  + card("Latest amount", last.total_amount!=null?peso(last.total_amount):"—", dA==null?"":arrow(dA)+peso(Math.abs(dA)), dA)
+  + card("Avg ₱/kWh", avgRate!=null?"₱"+num(avgRate,4):"—", bills.length+" period(s)");
+}
+function card(lbl,val,sub,dir){
+  const cls = dir==null?"muted":(dir>0?"up":"down");
+  return `<div class="stat"><div class="lbl">${lbl}</div><div class="val">${val}</div><div class="sub ${cls}">${sub||"&nbsp;"}</div></div>`;
+}
+function arrow(n){return n>0?"▲ ":(n<0?"▼ ":"");}
+
+function renderTable(){
+  const body=document.getElementById("hist-body");
+  document.getElementById("hist-empty").classList.toggle("hide",bills.length>0);
+  document.getElementById("hist").classList.toggle("hide",bills.length===0);
+  const rows=[...bills].reverse();
+  body.innerHTML=rows.map((b,i)=>{
+    const idx=bills.indexOf(b); const prev=idx>0?bills[idx-1]:null;
+    const dK=prev?b.kwh_used-prev.kwh_used:null;
+    const dA=(prev&&b.total_amount!=null&&prev.total_amount!=null)?b.total_amount-prev.total_amount:null;
+    return `<tr>
+      <td>${fmtPeriod(b)}</td>
+      <td class="num">${num(b.previous_reading)}</td>
+      <td class="num">${num(b.current_reading)}</td>
+      <td class="num"><b>${num(b.kwh_used)}</b></td>
+      <td class="num">${dK==null?"—":`<span class="pill ${dK>0?"up":"down"}">${arrow(dK)}${num(Math.abs(dK))}</span>`}</td>
+      <td class="num">${b.total_amount!=null?peso(b.total_amount):"—"}</td>
+      <td class="num">${b.rate_per_kwh!=null?"₱"+num(b.rate_per_kwh,4):"—"}</td>
+      <td class="num">${dA==null?"—":`<span class="pill ${dA>0?"up":"down"}">${arrow(dA)}${peso(Math.abs(dA))}</span>`}</td>
+      <td class="num"><button class="del" title="Delete" onclick="delBill('${b.id}')">✕</button></td>
+    </tr>`;
+  }).join("");
+}
+function fmtPeriod(b){
+  if(b.period_end){const e=new Date(b.period_end);const m=e.toLocaleDateString("en-PH",{month:"short",year:"numeric"});return m;}
+  return new Date(b.created_at).toLocaleDateString("en-PH",{month:"short",year:"numeric"});
+}
+
+function renderChart(){
+  const ctx=document.getElementById("chart");
+  const labels=bills.map(fmtPeriod);
+  const kwh=bills.map(b=>Number(b.kwh_used));
+  const amt=bills.map(b=>b.total_amount!=null?Number(b.total_amount):null);
+  if(chart)chart.destroy();
+  chart=new Chart(ctx,{
+    data:{labels,datasets:[
+      {type:"bar",label:"kWh consumed",data:kwh,backgroundColor:"#f7941e",borderRadius:5,yAxisID:"y",order:2},
+      {type:"line",label:"Total amount (₱)",data:amt,borderColor:"#11243e",backgroundColor:"#11243e",tension:.3,yAxisID:"y1",order:1,spanGaps:true,pointRadius:3}
+    ]},
+    options:{responsive:true,interaction:{mode:"index",intersect:false},
+      plugins:{legend:{labels:{font:{size:12},usePointStyle:true}},title:{display:true,text:"Consumption & Cost Trend"+(currentAcct?" — "+currentAcct.account_name:""),font:{size:13}}},
+      scales:{
+        y:{position:"left",title:{display:true,text:"kWh"},grid:{color:"#eef1f6"}},
+        y1:{position:"right",title:{display:true,text:"₱"},grid:{drawOnChartArea:false}}
+      }}
+  });
+}
+
+/* ---------- EXPORT ---------- */
+function exportCSV(){
+  if(!bills.length){toast("Nothing to export");return;}
+  const head=["Account","Period start","Period end","Due date","Previous reading","Current reading","kWh used","Total amount","Rate per kWh","Notes"];
+  const lines=[head.join(",")];
+  bills.forEach(b=>{
+    lines.push([q(currentAcct.account_name),b.period_start||"",b.period_end||"",b.due_date||"",
+      b.previous_reading,b.current_reading,b.kwh_used,b.total_amount??"",b.rate_per_kwh??"",q(b.notes||"")].join(","));
+  });
+  const blob=new Blob([lines.join("\n")],{type:"text/csv"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+  a.download=`meralco_${(currentAcct.account_name||"bills").replace(/\W+/g,"_")}.csv`;a.click();
+}
+function q(s){s=String(s);return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}
+function val(id){return document.getElementById(id).value.trim()||null;}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+
+init();
+</script>
+</body>
+</html>
