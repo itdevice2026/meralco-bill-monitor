@@ -27,6 +27,10 @@
   .logo small{display:block;font-size:11px;color:#9fb0c9;font-weight:400}
   header .spacer{flex:1}
   .who{font-size:12.5px;color:#cdd8e8}
+  .role-badge{font-size:10.5px;font-weight:800;letter-spacing:.6px;background:var(--orange);color:#fff;padding:3px 9px;border-radius:20px;text-transform:uppercase}
+  .role-badge.viewer{background:#5a6b86}
+  .role-badge.encoder{background:#2f7fd1}
+  .readonly-note{background:#eef2f8;border:1px dashed var(--line);color:var(--muted);font-size:12px;padding:8px 11px;border-radius:9px;margin-top:6px}
   .btn-ghost{background:transparent;border:1px solid #39507a;color:#cdd8e8;padding:7px 12px;border-radius:8px;font-size:12.5px}
   .btn-ghost:hover{background:#1b3458}
 
@@ -132,6 +136,7 @@
       <div><h1>Meralco Bill Monitoring System</h1><small>Track consumption &amp; cost per kWh</small></div>
     </div>
     <div class="spacer"></div>
+    <span class="role-badge" id="role-badge"></span>
     <span class="who" id="who"></span>
     <button class="btn-ghost" onclick="doLogout()">Sign out</button>
   </header>
@@ -148,6 +153,7 @@
           <label>Select account</label>
           <select id="acct-select" onchange="onAcctChange()"></select>
           <div id="acct-info" class="acct-info"></div>
+          <div class="readonly-note" id="acct-readonly" style="display:none">🔒 You have <b>view-only</b> access. You can browse and export data. Contact an admin for edit rights.</div>
           <button class="btn btn-sec" onclick="toggleAcctForm()" id="acct-toggle">+ Add new account</button>
           <div id="acct-form" class="hide">
             <label>Account name *</label>
@@ -214,6 +220,17 @@
           </div>
           <div class="empty hide" id="hist-empty"><div class="ic">📊</div>No billing entries yet for this account.</div>
         </div>
+
+        <div class="card hide" id="roles-card">
+          <h2><span class="dot"></span>Users &amp; Roles <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);font-size:11px">— admin only</span></h2>
+          <p class="muted" style="margin:0 0 10px;font-size:12px"><b>Viewer</b>: read &amp; export only · <b>Encoder</b>: add/edit accounts &amp; bills · <b>Admin</b>: full control incl. delete &amp; roles.</p>
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr><th>User</th><th style="width:140px">Role</th></tr></thead>
+              <tbody id="roles-body"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -257,7 +274,9 @@ const SUPABASE_URL = "https://emkcwukiqxnvcbhkjiqz.supabase.co";
 const SUPABASE_KEY = "sb_publishable_u_qnmEI8oHI9Z_A0-Hht3Q_Yvaa7Ork";
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-let accounts = [], bills = [], currentAcct = null, chart = null;
+let accounts = [], bills = [], currentAcct = null, chart = null, role = 'viewer';
+function canEdit(){ return role==='admin' || role==='encoder'; }
+function isAdmin(){ return role==='admin'; }
 const peso = n => "₱" + (n==null?0:Number(n)).toLocaleString("en-PH",{minimumFractionDigits:2,maximumFractionDigits:2});
 const num = (n,d=2) => n==null?"—":Number(n).toLocaleString("en-PH",{minimumFractionDigits:d,maximumFractionDigits:d});
 function toast(m){const t=document.getElementById("toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2200);}
@@ -278,11 +297,48 @@ async function doLogin(){
   showApp(data.session);
 }
 async function doLogout(){ await sb.auth.signOut(); location.reload(); }
-function showApp(session){
+async function showApp(session){
   document.getElementById("login").classList.add("hide");
   document.getElementById("app").classList.remove("hide");
   document.getElementById("who").textContent = session.user.email;
+  await fetchRole(session.user.id);
   loadAccounts();
+}
+
+/* ---------- RBAC ---------- */
+async function fetchRole(uid){
+  const {data}=await sb.from("meralco_user_roles").select("role").eq("user_id",uid).maybeSingle();
+  role = data && data.role ? data.role : 'viewer';
+  applyRole();
+}
+function applyRole(){
+  const b=document.getElementById("role-badge");
+  b.textContent=role; b.className="role-badge "+role;
+  const ce=canEdit(), ad=isAdmin();
+  document.getElementById("acct-toggle").style.display = ce?"":"none";
+  if(!ce) document.getElementById("acct-form").classList.add("hide");
+  document.getElementById("bill-card").style.display = ce?"":"none";
+  const ro=document.getElementById("acct-readonly"); if(ro) ro.style.display = ce?"none":"block";
+  const rc=document.getElementById("roles-card"); rc.classList.toggle("hide", !ad);
+  if(ad) loadRoles();
+}
+async function loadRoles(){
+  const [{data:profs},{data:roles}] = await Promise.all([
+    sb.from("profiles").select("id,email,name,active").order("email"),
+    sb.from("meralco_user_roles").select("user_id,role")
+  ]);
+  const rmap={}; (roles||[]).forEach(x=>rmap[x.user_id]=x.role);
+  const opts=["viewer","encoder","admin"];
+  document.getElementById("roles-body").innerHTML = (profs||[]).map(p=>{
+    const cur=rmap[p.id]||"viewer";
+    return `<tr><td>${esc(p.name||p.email||"(no name)")}<div class="muted" style="font-size:11px">${esc(p.email||"")}</div></td>
+      <td><select onchange="setRole('${p.id}',this.value)">${opts.map(o=>`<option value="${o}" ${o===cur?"selected":""}>${o}</option>`).join("")}</select></td></tr>`;
+  }).join("");
+}
+async function setRole(uid, r){
+  const {error}=await sb.from("meralco_user_roles").upsert({user_id:uid, role:r},{onConflict:"user_id"});
+  if(error){toast("Role error: "+error.message);return;}
+  toast("Role updated");
 }
 document.getElementById("li-pass").addEventListener("keydown",e=>{if(e.key==="Enter")doLogin();});
 
@@ -457,7 +513,7 @@ function renderTable(){
       <td class="num">${b.total_amount!=null?peso(b.total_amount):"—"}</td>
       <td class="num">${b.rate_per_kwh!=null?"₱"+num(b.rate_per_kwh,4):"—"}</td>
       <td class="num">${dA==null?"—":`<span class="pill ${dA>0?"up":"down"}">${arrow(dA)}${peso(Math.abs(dA))}</span>`}</td>
-      <td class="num" style="white-space:nowrap"><button class="edit" title="Edit" onclick="openEdit('${b.id}')">✎</button><button class="del" title="Delete" onclick="delBill('${b.id}')">✕</button></td>
+      <td class="num" style="white-space:nowrap">${(canEdit()?`<button class="edit" title="Edit" onclick="openEdit('${b.id}')">✎</button>`:"")+(isAdmin()?`<button class="del" title="Delete" onclick="delBill('${b.id}')">✕</button>`:"")||'<span class="muted">—</span>'}</td>
     </tr>`;
   }).join("");
 }
