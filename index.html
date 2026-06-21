@@ -72,6 +72,16 @@
   .pill.up{background:var(--red-bg)} .pill.down{background:var(--green-bg)}
   .del{color:var(--muted);background:none;border:none;font-size:15px}
   .del:hover{color:var(--red)}
+  .edit{color:var(--muted);background:none;border:none;font-size:14px;margin-right:7px}
+  .edit:hover{color:var(--orange-d)}
+
+  /* Modal */
+  .modal-bg{position:fixed;inset:0;background:rgba(17,36,62,.55);display:flex;align-items:center;justify-content:center;z-index:40;padding:20px}
+  .modal{background:#fff;border-radius:14px;padding:22px;width:100%;max-width:450px;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:92vh;overflow:auto}
+  .modal h3{font-size:16px;color:var(--navy);margin-bottom:2px}
+  .modal .sub{font-size:12px;color:var(--muted);margin-bottom:6px}
+  .modal-actions{display:flex;gap:10px;margin-top:16px}
+  .modal-actions .btn,.modal-actions .btn-sec{margin-top:0}
 
   .toolbar{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
   .toolbar select{width:auto;min-width:200px}
@@ -209,6 +219,37 @@
   </div>
 </div>
 
+<!-- EDIT MODAL -->
+<div class="modal-bg hide" id="edit-bg">
+  <div class="modal">
+    <h3>Edit Billing Entry</h3>
+    <div class="sub" id="e-acct"></div>
+    <div class="row2">
+      <div><label>Period start</label><input id="e-start" type="date" /></div>
+      <div><label>Period end</label><input id="e-end" type="date" /></div>
+    </div>
+    <label>Due date</label>
+    <input id="e-due" type="date" />
+    <div class="row2">
+      <div><label>Previous reading (kWh)</label><input id="e-prev" type="number" step="0.01" inputmode="decimal" oninput="editCalc('reading')" /></div>
+      <div><label>Current reading (kWh)</label><input id="e-curr" type="number" step="0.01" inputmode="decimal" oninput="editCalc('reading')" /></div>
+    </div>
+    <div class="row2">
+      <div><label>Total amount (₱)</label><input id="e-amt" type="number" step="0.01" inputmode="decimal" oninput="editCalc('amt')" /></div>
+      <div><label>₱ per kWh (editable)</label><input id="e-rate" type="number" step="0.0001" inputmode="decimal" oninput="editCalc('rate')" /></div>
+    </div>
+    <label>Notes</label>
+    <input id="e-notes" />
+    <div class="calc-box">
+      <div class="crow"><span>kWh consumed</span><b id="e-kwh">—</b></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="closeEdit()">Cancel</button>
+      <button class="btn" onclick="saveEdit()">Save changes</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -324,6 +365,56 @@ async function delBill(id){
   toast("Deleted"); loadBills();
 }
 
+/* ---------- EDIT ---------- */
+let editId=null;
+function openEdit(id){
+  const b=bills.find(x=>x.id===id); if(!b)return; editId=id;
+  document.getElementById("e-acct").textContent = currentAcct? (currentAcct.account_name + (currentAcct.account_number?"  ·  CAN "+currentAcct.account_number:"")) : "";
+  document.getElementById("e-start").value=b.period_start||"";
+  document.getElementById("e-end").value=b.period_end||"";
+  document.getElementById("e-due").value=b.due_date||"";
+  document.getElementById("e-prev").value=b.previous_reading;
+  document.getElementById("e-curr").value=b.current_reading;
+  document.getElementById("e-amt").value=b.total_amount??"";
+  document.getElementById("e-rate").value=b.rate_per_kwh??"";
+  document.getElementById("e-notes").value=b.notes||"";
+  editCalc('open');
+  document.getElementById("edit-bg").classList.remove("hide");
+}
+function closeEdit(){ editId=null; document.getElementById("edit-bg").classList.add("hide"); }
+function editKwh(){
+  const p=parseFloat(document.getElementById("e-prev").value);
+  const c=parseFloat(document.getElementById("e-curr").value);
+  return (isFinite(p)&&isFinite(c))?(c-p):null;
+}
+function editCalc(src){
+  const kwh=editKwh();
+  document.getElementById("e-kwh").textContent = kwh==null?"—":num(kwh)+" kWh";
+  const amtEl=document.getElementById("e-amt"), rateEl=document.getElementById("e-rate");
+  if(src==='rate'){            // user typed ₱/kWh → derive amount
+    const r=parseFloat(rateEl.value);
+    if(isFinite(r)&&kwh!=null&&kwh>0) amtEl.value=(r*kwh).toFixed(2);
+  } else {                     // readings/amount/open changed → derive ₱/kWh from amount
+    const a=parseFloat(amtEl.value);
+    if(isFinite(a)&&kwh!=null&&kwh>0) rateEl.value=(a/kwh).toFixed(4);
+    else if(src!=='open') rateEl.value="";
+  }
+}
+async function saveEdit(){
+  if(!editId)return;
+  const prev=parseFloat(document.getElementById("e-prev").value);
+  const curr=parseFloat(document.getElementById("e-curr").value);
+  if(!isFinite(prev)||!isFinite(curr)){toast("Enter previous & current readings");return;}
+  if(curr<prev){toast("Current reading is less than previous");return;}
+  const amt=parseFloat(document.getElementById("e-amt").value);
+  const rec={period_start:val("e-start"),period_end:val("e-end"),due_date:val("e-due"),
+    previous_reading:prev,current_reading:curr,
+    total_amount:isFinite(amt)?amt:null,notes:val("e-notes")};
+  const {error}=await sb.from("meralco_bills").update(rec).eq("id",editId);
+  if(error){toast("Update error: "+error.message);return;}
+  toast("Entry updated"); closeEdit(); loadBills();
+}
+
 /* ---------- RENDER ---------- */
 function render(){ renderStats(); renderTable(); renderChart(); }
 
@@ -366,7 +457,7 @@ function renderTable(){
       <td class="num">${b.total_amount!=null?peso(b.total_amount):"—"}</td>
       <td class="num">${b.rate_per_kwh!=null?"₱"+num(b.rate_per_kwh,4):"—"}</td>
       <td class="num">${dA==null?"—":`<span class="pill ${dA>0?"up":"down"}">${arrow(dA)}${peso(Math.abs(dA))}</span>`}</td>
-      <td class="num"><button class="del" title="Delete" onclick="delBill('${b.id}')">✕</button></td>
+      <td class="num" style="white-space:nowrap"><button class="edit" title="Edit" onclick="openEdit('${b.id}')">✎</button><button class="del" title="Delete" onclick="delBill('${b.id}')">✕</button></td>
     </tr>`;
   }).join("");
 }
