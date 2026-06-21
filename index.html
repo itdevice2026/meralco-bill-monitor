@@ -77,6 +77,8 @@
   .toolbar select{width:auto;min-width:200px}
   .toolbar .spacer{flex:1}
   .muted{color:var(--muted)}
+  .acct-info{font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.5}
+  .acct-info b{color:var(--navy);font-variant-numeric:tabular-nums}
   .empty{text-align:center;padding:40px 20px;color:var(--muted)}
   .empty .ic{font-size:34px;margin-bottom:8px}
 
@@ -135,18 +137,19 @@
           <h2><span class="dot"></span>Account / Meter</h2>
           <label>Select account</label>
           <select id="acct-select" onchange="onAcctChange()"></select>
+          <div id="acct-info" class="acct-info"></div>
           <button class="btn btn-sec" onclick="toggleAcctForm()" id="acct-toggle">+ Add new account</button>
           <div id="acct-form" class="hide">
             <label>Account name *</label>
             <input id="a-name" placeholder="e.g. Main Plant — Marikina" />
+            <label>Customer Account No. (CAN) *</label>
+            <input id="a-acctno" placeholder="e.g. 0000 0000 0000" />
             <div class="row2">
-              <div><label>Account number</label><input id="a-acctno" placeholder="0000-0000-00" /></div>
               <div><label>Meter number</label><input id="a-meterno" placeholder="Meter #" /></div>
+              <div><label>Rate class</label><input id="a-rate" placeholder="Commercial" /></div>
             </div>
             <label>Service address</label>
             <input id="a-addr" placeholder="Address" />
-            <label>Rate class</label>
-            <input id="a-rate" placeholder="e.g. Commercial / Residential" />
             <button class="btn" onclick="saveAccount()">Save account</button>
           </div>
         </div>
@@ -248,16 +251,25 @@ async function loadAccounts(){
   if(error){toast("Load error: "+error.message);return;}
   accounts=data||[];
   const sel=document.getElementById("acct-select");
-  sel.innerHTML = accounts.length? accounts.map(a=>`<option value="${a.id}">${esc(a.account_name)}${a.meter_number?" — "+esc(a.meter_number):""}</option>`).join("")
+  sel.innerHTML = accounts.length? accounts.map(a=>`<option value="${a.id}">${esc(a.account_name)}${a.account_number?" — CAN "+esc(a.account_number):""}</option>`).join("")
     : `<option value="">No accounts yet — add one →</option>`;
-  if(accounts.length){ currentAcct = accounts.find(a=>a.id===currentAcct?.id)||accounts[0]; sel.value=currentAcct.id; loadBills(); }
-  else { currentAcct=null; bills=[]; render(); document.getElementById("acct-form").classList.remove("hide"); }
+  if(accounts.length){ currentAcct = accounts.find(a=>a.id===currentAcct?.id)||accounts[0]; sel.value=currentAcct.id; renderAcctInfo(); loadBills(); }
+  else { currentAcct=null; bills=[]; renderAcctInfo(); render(); document.getElementById("acct-form").classList.remove("hide"); }
 }
-function onAcctChange(){ currentAcct=accounts.find(a=>a.id===document.getElementById("acct-select").value); loadBills(); }
+function onAcctChange(){ currentAcct=accounts.find(a=>a.id===document.getElementById("acct-select").value); renderAcctInfo(); loadBills(); }
+function renderAcctInfo(){
+  const el=document.getElementById("acct-info");
+  if(!currentAcct){el.innerHTML="";return;}
+  const a=currentAcct;
+  el.innerHTML = `Customer Account No.: <b>${a.account_number?esc(a.account_number):"—"}</b>`
+    + (a.meter_number?`&nbsp;&nbsp;·&nbsp;&nbsp;Meter: <b>${esc(a.meter_number)}</b>`:"")
+    + (a.service_address?`<br>${esc(a.service_address)}`:"");
+}
 function toggleAcctForm(){ document.getElementById("acct-form").classList.toggle("hide"); }
 async function saveAccount(){
   const name=document.getElementById("a-name").value.trim();
   if(!name){toast("Account name is required");return;}
+  if(!document.getElementById("a-acctno").value.trim()){toast("Customer Account No. (CAN) is required");return;}
   const rec={account_name:name,
     account_number:val("a-acctno"),meter_number:val("a-meterno"),
     service_address:val("a-addr"),rate_class:val("a-rate")};
@@ -386,10 +398,10 @@ function renderChart(){
 /* ---------- EXPORT ---------- */
 function exportCSV(){
   if(!bills.length){toast("Nothing to export");return;}
-  const head=["Account","Period start","Period end","Due date","Previous reading","Current reading","kWh used","Total amount","Rate per kWh","Notes"];
+  const head=["Account","Customer Account No","Period start","Period end","Due date","Previous reading","Current reading","kWh used","Total amount","Rate per kWh","Notes"];
   const lines=[head.join(",")];
   bills.forEach(b=>{
-    lines.push([q(currentAcct.account_name),b.period_start||"",b.period_end||"",b.due_date||"",
+    lines.push([q(currentAcct.account_name),q(currentAcct.account_number||""),b.period_start||"",b.period_end||"",b.due_date||"",
       b.previous_reading,b.current_reading,b.kwh_used,b.total_amount??"",b.rate_per_kwh??"",q(b.notes||"")].join(","));
   });
   const blob=new Blob([lines.join("\n")],{type:"text/csv"});
